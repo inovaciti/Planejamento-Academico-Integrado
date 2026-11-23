@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     static_dir: str | None = None
     # A Render informa a URL pública do serviço; ela vira uma origem permitida.
     render_external_url: str | None = None
+    # O Railway informa só o domínio público (sem https://); também vira origem permitida.
+    railway_public_domain: str | None = None
 
     @field_validator("database_url")
     @classmethod
@@ -27,9 +29,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def allow_public_url(self):
-        url = (self.render_external_url or "").rstrip("/")
-        if url and url not in self.allowed_origins:
-            self.allowed_origins = [*self.allowed_origins, url]
+        railway = (self.railway_public_domain or "").strip().rstrip("/")
+        for url in (
+            (self.render_external_url or "").rstrip("/"),
+            f"https://{railway}" if railway else "",
+        ):
+            if url and url not in self.allowed_origins:
+                self.allowed_origins = [*self.allowed_origins, url]
         return self
 
 

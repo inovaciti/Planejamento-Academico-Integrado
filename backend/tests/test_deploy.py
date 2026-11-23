@@ -28,6 +28,17 @@ def test_public_url_becomes_allowed_origin():
     assert "http://localhost:5173" in settings.allowed_origins
 
 
+def test_railway_domain_becomes_allowed_origin_with_https():
+    settings = Settings(_env_file=None, railway_public_domain="pai-production-1a2b.up.railway.app")
+    assert "https://pai-production-1a2b.up.railway.app" in settings.allowed_origins
+    assert "http://localhost:5173" in settings.allowed_origins
+    # Sem a variável (outras hospedagens), nada muda.
+    assert Settings(_env_file=None).allowed_origins == [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ]
+
+
 @pytest.fixture
 def site(tmp_path):
     (tmp_path / "index.html").write_text("<div id=root></div>")
