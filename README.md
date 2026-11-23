@@ -160,7 +160,7 @@ O `Dockerfile` da raiz gera uma imagem única: compila o React e o FastAPI entre
 2. No painel, escolha **New → Blueprint**, selecione o repositório e a branch. O `render.yaml` cria o serviço web `pai` e o banco `pai-db`, ambos no plano gratuito, e liga `DATABASE_URL` ao banco.
 3. Ao fim do deploy, o site fica em `https://pai-XXXX.onrender.com`. A URL pública (`RENDER_EXTERNAL_URL`) é aceita como origem automaticamente, e o cookie de sessão usa `Secure`.
 
-Limites do plano gratuito: o serviço dorme após 15 minutos sem acesso, e o primeiro acesso seguinte leva cerca de 1 minuto. O PostgreSQL gratuito expira 30 dias após a criação. O build da imagem liga `VITE_PUBLIC_DEMO`, que exibe no login e na importação o aviso para usar **apenas dados fictícios**. Não importe históricos reais na versão online.
+Limites do plano gratuito: o serviço dorme após 15 minutos sem acesso, e o primeiro acesso seguinte leva cerca de 1 minuto. O PostgreSQL gratuito expira 30 dias após a criação. O `render.yaml` liga `VITE_PUBLIC_DEMO` no build, que exibe no login e na importação o aviso para usar **apenas dados fictícios**. Não importe históricos reais na versão de testes. Em outras hospedagens (como o Railway) o aviso fica desligado, a menos que o build receba `VITE_PUBLIC_DEMO=true`.
 
 Para testar a imagem localmente, com o banco do Compose ativo:
 
