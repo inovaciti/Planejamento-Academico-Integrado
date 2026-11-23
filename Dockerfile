@@ -6,8 +6,11 @@ WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
-# Mostra o aviso "use apenas dados fictícios" no login e na importação.
-ENV VITE_PUBLIC_DEMO=true
+# Aviso "use apenas dados fictícios" no login e na importação. Desligado por
+# padrão; a versão de testes liga com --build-arg VITE_PUBLIC_DEMO=true (na
+# Render, pela variável de mesmo nome em render.yaml).
+ARG VITE_PUBLIC_DEMO=false
+ENV VITE_PUBLIC_DEMO=$VITE_PUBLIC_DEMO
 RUN npm run build
 
 # 2) API em Python
