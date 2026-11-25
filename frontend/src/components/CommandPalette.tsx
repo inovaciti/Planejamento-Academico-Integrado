@@ -48,9 +48,34 @@ export function CommandPalette({
       return terms.every((term) => text.includes(term));
     });
     // Sem busca, mostra só as páginas; com busca, as disciplinas aparecem.
-    return (
-      terms.length ? matches : matches.filter((c) => c.group !== "Disciplinas")
-    ).slice(0, 40);
+    if (!terms.length)
+      return matches.filter((c) => c.group !== "Disciplinas").slice(0, 40);
+    // O nome mais parecido com a busca vem primeiro: "banco dados" escolhe
+    // "Banco de Dados" antes de "Bancos de Dados Não-Convencionais".
+    // A ordem dos grupos é mantida para os títulos não se repetirem.
+    const score = (command: Command) => {
+      const label = normalize(command.label);
+      if (label === terms.join(" ")) return 0;
+      const words = label.split(/[^\p{L}\p{N}]+/u);
+      if (terms.every((term) => words.includes(term))) return 1;
+      if (terms.every((term) => words.some((word) => word.startsWith(term))))
+        return 2;
+      return 3;
+    };
+    const groupOrder = new Map<string, number>();
+    for (const command of matches)
+      if (!groupOrder.has(command.group))
+        groupOrder.set(command.group, groupOrder.size);
+    return matches
+      .map((command, index) => ({ command, index, rank: score(command) }))
+      .sort(
+        (a, b) =>
+          groupOrder.get(a.command.group)! - groupOrder.get(b.command.group)! ||
+          a.rank - b.rank ||
+          a.index - b.index,
+      )
+      .map(({ command }) => command)
+      .slice(0, 40);
   }, [commands, query]);
   useEffect(() => setActive(0), [query]);
   useEffect(() => {
