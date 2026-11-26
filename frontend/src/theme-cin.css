@@ -98,6 +98,14 @@ h2,
     inset 0 1px 0 #ffffff45 !important;
 }
 .primary-button:hover:not(:disabled) {
+  /* Mantém o vermelho no hover (o tema antigo trocava por azul com
+     !important) — no celular o hover fica preso depois do toque. */
+  background: linear-gradient(
+    135deg,
+    var(--brand-glow),
+    var(--brand) 45%,
+    var(--brand-strong)
+  ) !important;
   transform: translateY(-2px);
   box-shadow:
     0 16px 30px -12px color-mix(in srgb, var(--brand) 80%, transparent),
