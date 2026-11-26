@@ -1,4 +1,5 @@
 import { titleCase } from "../display";
+import { periodOf, termOf } from "../academicTerms";
 import { useRef, useState } from "react";
 import type {
   Course,
@@ -92,6 +93,41 @@ export function HistoryEditor({
     setRecords((current) =>
       current.map((record, i) => (i === index ? value : record)),
     );
+  }
+
+  const validStart = /^\d{4}\.[12]$/.test(startTerm);
+  const byId = new Map(courses.map((course) => [course.id, course]));
+  /**
+   * Semestre sugerido ao escolher a disciplina de uma linha sem semestre:
+   * obrigatória vai para o período da matriz (limitado ao atual); eletiva
+   * repete o semestre da linha anterior. Nunca o ingresso por omissão.
+   */
+  function suggestedTerm(courseId: string, index: number) {
+    const course = byId.get(courseId);
+    if (validStart && course?.type === "mandatory" && course.period) {
+      const limit = Math.max(1, Number(currentPeriod) || 1);
+      return termOf(startTerm, Math.min(course.period, limit));
+    }
+    return records
+      .slice(0, index)
+      .reverse()
+      .find((r) => r.academic_term)?.academic_term;
+  }
+  /** "3º período" e, se for o caso, o aviso de que o card muda de coluna. */
+  function termHint(record: HistoryRecord) {
+    if (!validStart || !/^\d{4}\.[12]$/.test(record.academic_term)) return null;
+    const period = periodOf(startTerm, record.academic_term);
+    if (period < 1)
+      return { text: "Antes do semestre de ingresso.", warn: true };
+    const course = byId.get(record.course_id);
+    const moved =
+      course?.type === "mandatory" && course.period && course.period !== period;
+    return moved
+      ? {
+          text: `${period}º período · aparece na coluna do ${period}º período, fora do ${course.period}º da matriz.`,
+          warn: true,
+        }
+      : { text: `${period}º período`, warn: false };
   }
 
   return (
@@ -288,9 +324,17 @@ export function HistoryEditor({
                 className={input}
                 required
                 value={record.course_id}
-                onChange={(event) =>
-                  update(index, { ...record, course_id: event.target.value })
-                }
+                onChange={(event) => {
+                  const courseId = event.target.value;
+                  update(index, {
+                    ...record,
+                    course_id: courseId,
+                    academic_term:
+                      record.academic_term ||
+                      suggestedTerm(courseId, index) ||
+                      "",
+                  });
+                }}
               >
                 <option value="">Selecione</option>
                 {courses.map((course) => (
@@ -307,6 +351,7 @@ export function HistoryEditor({
                 required
                 placeholder="AAAA.1"
                 pattern="[0-9]{4}\.[12]"
+                inputMode="decimal"
                 value={record.academic_term}
                 onChange={(event) =>
                   update(index, {
@@ -315,6 +360,16 @@ export function HistoryEditor({
                   })
                 }
               />
+              {(() => {
+                const hint = termHint(record);
+                return hint ? (
+                  <span
+                    className={`mt-1 block text-xs ${hint.warn ? "text-amber-800" : "text-slate-500"}`}
+                  >
+                    {hint.text}
+                  </span>
+                ) : null;
+              })()}
             </label>
             <label className="text-sm">
               Situação
@@ -373,9 +428,11 @@ export function HistoryEditor({
           type="button"
           className={button}
           onClick={() =>
+            // Sem semestre: ele vem da disciplina escolhida (ou é informado),
+            // em vez de cair no ingresso e jogar a cadeira no 1º período.
             setRecords((current) => [
               ...current,
-              { course_id: "", academic_term: startTerm, status: "completed" },
+              { course_id: "", academic_term: "", status: "completed" },
             ])
           }
         >

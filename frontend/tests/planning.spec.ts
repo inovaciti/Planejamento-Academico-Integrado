@@ -13,7 +13,7 @@ test("planejar não desbloqueia dependentes; aprovação e restauração usam a 
       exact: true,
     })
     .click();
-  const panel = page.getByRole("complementary", {
+  const panel = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await panel
@@ -52,7 +52,7 @@ test("filtros, troca de cenário e detalhes funcionam em tela pequena", async ({
   await page
     .getByRole("button", { name: "Desenvolvimento de Software", exact: true })
     .click();
-  const panel = page.getByRole("complementary", {
+  const panel = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await expect(panel.getByText("Pendente", { exact: true })).toBeVisible();

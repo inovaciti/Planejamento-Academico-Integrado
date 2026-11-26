@@ -1,9 +1,14 @@
-import { formatGrade } from "../academicTerms";
+import {
+  formatGrade,
+  nearestFreeTerm,
+  periodOf,
+  termWithPeriod,
+} from "../academicTerms";
 import type { Course, HistoryRecord } from "../types";
 import { failureText } from "./CourseCard";
 
 const field =
-  "attempt-field block w-full rounded-lg border border-slate-300 bg-white px-2 text-[13px]";
+  "attempt-field block w-full rounded-lg border border-slate-300 bg-white px-2 text-sm";
 const small =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50";
 
@@ -12,6 +17,7 @@ export function AttemptsEditor({
   course,
   records,
   terms,
+  startTerm,
   defaultTerm,
   firstPeriodRequired,
   failureLimit,
@@ -21,6 +27,8 @@ export function AttemptsEditor({
   course: Course;
   records: HistoryRecord[];
   terms: string[];
+  /** Ingresso: dá o período de cada semestre ("2025.1 · 3º período"). */
+  startTerm: string;
   defaultTerm: string;
   firstPeriodRequired: boolean;
   failureLimit: number;
@@ -36,6 +44,10 @@ export function AttemptsEditor({
   const used = new Set(sorted.map((r) => r.academic_term));
   const free = terms.filter((t) => !used.has(t));
   const current = terms[terms.length - 1];
+  // Ocupado o semestre esperado, vale o livre mais próximo — nunca o 1º por acaso.
+  const preferred = nearestFreeTerm(free, defaultTerm);
+  const label = (term: string) => termWithPeriod(startTerm, term);
+  const canAdd = !refused && !approved && free.length > 0;
 
   function update(index: number, change: Partial<HistoryRecord>) {
     onChange(
@@ -48,7 +60,6 @@ export function AttemptsEditor({
     );
   }
   function add(status: HistoryRecord["status"]) {
-    const preferred = free.includes(defaultTerm) ? defaultTerm : free[0];
     const term = status === "in_progress" ? current : preferred;
     if (!term || used.has(term)) return;
     onChange([
@@ -56,15 +67,58 @@ export function AttemptsEditor({
       { course_id: course.id, academic_term: term, status },
     ]);
   }
+  /** Obrigatória cursada fora do período da matriz muda de coluna no mapa. */
+  const movedTo = (term: string) => {
+    if (course.type !== "mandatory" || !course.period) return null;
+    const period = periodOf(startTerm, term);
+    return period >= 1 && period !== course.period ? period : null;
+  };
 
   return (
     <section
-      className="attempts-editor mt-5"
+      className="attempts-editor mt-4"
       aria-label="Situação no histórico"
     >
       <h3 className="text-xs font-semibold text-slate-600">
         Situação no histórico
       </h3>
+      {canAdd && (
+        <div className="attempt-actions mt-2">
+          <p className="text-xs text-slate-600">
+            Registrar em <strong>{label(preferred ?? current)}</strong>
+            {!sorted.length && " (dá para trocar o semestre depois)"}
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              className="attempt-action"
+              data-kind="completed"
+              onClick={() => add("completed")}
+            >
+              + Aprovada
+            </button>
+            <button
+              type="button"
+              className="attempt-action"
+              data-kind="failed"
+              onClick={() => add("failed")}
+            >
+              + Reprovada
+            </button>
+            {!used.has(current) && (
+              <button
+                type="button"
+                className="attempt-action"
+                data-kind="in_progress"
+                onClick={() => add("in_progress")}
+                title={`Cursando em ${label(current)}`}
+              >
+                + Cursando agora
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {!sorted.length && (
         <p
           className={`mt-2 rounded-lg p-2.5 text-xs leading-5 ${firstPeriodRequired ? "bg-amber-50 text-amber-900" : "bg-slate-50 text-slate-600"}`}
@@ -85,114 +139,100 @@ export function AttemptsEditor({
         </p>
       )}
       <div className="mt-2 space-y-2">
-        {sorted.map((record, index) => (
-          <div
-            key={record.academic_term}
-            className="rounded-lg border border-slate-200 bg-white/70 p-2"
-            role="group"
-            aria-label={`Tentativa ${index + 1}`}
-          >
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[11px] text-slate-500">
-                Semestre
-                <select
+        {sorted.map((record, index) => {
+          const moved = movedTo(record.academic_term);
+          return (
+            <div
+              key={record.academic_term}
+              className="rounded-lg border border-slate-200 bg-white/70 p-2"
+              role="group"
+              aria-label={`Tentativa ${index + 1}`}
+            >
+              <div className="grid gap-2">
+                <label className="text-[11px] text-slate-500">
+                  Semestre
+                  <select
+                    className={field}
+                    value={record.academic_term}
+                    onChange={(e) =>
+                      update(index, { academic_term: e.target.value })
+                    }
+                  >
+                    {[record.academic_term, ...free].sort().map((term) => (
+                      <option key={term} value={term}>
+                        {label(term)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-[11px] text-slate-500">
+                  Situação
+                  <select
+                    className={field}
+                    value={record.status}
+                    onChange={(e) =>
+                      update(index, {
+                        status: e.target.value as HistoryRecord["status"],
+                      })
+                    }
+                  >
+                    <option value="completed">Aprovada</option>
+                    <option value="failed">Reprovada</option>
+                    <option value="in_progress">Cursando</option>
+                  </select>
+                </label>
+              </div>
+              {moved && (
+                <p className="attempt-moved mt-2 text-xs leading-5">
+                  Aparece na coluna do <strong>{moved}º período</strong> no
+                  mapa, fora do {course.period}º período da matriz.
+                </p>
+              )}
+              <label className="mt-2 block text-[11px] text-slate-500">
+                Nota final
+                <input
                   className={field}
-                  value={record.academic_term}
-                  onChange={(e) =>
-                    update(index, { academic_term: e.target.value })
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="0.1"
+                  inputMode="decimal"
+                  disabled={record.status === "in_progress"}
+                  placeholder={
+                    record.status === "in_progress" ? "—" : "0 a 10 (opcional)"
                   }
-                >
-                  {[record.academic_term, ...free].sort().map((term) => (
-                    <option key={term} value={term}>
-                      {term}
-                    </option>
-                  ))}
-                </select>
+                  value={record.grade ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(",", ".");
+                    const grade = value === "" ? null : Number(value);
+                    if (grade === null || (grade >= 0 && grade <= 10))
+                      update(index, { grade });
+                  }}
+                />
               </label>
-              <label className="text-[11px] text-slate-500">
-                Situação
-                <select
-                  className={field}
-                  value={record.status}
-                  onChange={(e) =>
-                    update(index, {
-                      status: e.target.value as HistoryRecord["status"],
-                    })
-                  }
-                >
-                  <option value="completed">Aprovada</option>
-                  <option value="failed">Reprovada</option>
-                  <option value="in_progress">Cursando</option>
-                </select>
-              </label>
-            </div>
-            <label className="mt-2 block text-[11px] text-slate-500">
-              Nota final
-              <input
-                className={field}
-                type="number"
-                min="0"
-                max="10"
-                step="0.1"
-                inputMode="decimal"
-                disabled={record.status === "in_progress"}
-                placeholder={
-                  record.status === "in_progress" ? "—" : "0 a 10 (opcional)"
-                }
-                value={record.grade ?? ""}
-                onChange={(e) => {
-                  const value = e.target.value.replace(",", ".");
-                  const grade = value === "" ? null : Number(value);
-                  if (grade === null || (grade >= 0 && grade <= 10))
-                    update(index, { grade });
-                }}
-              />
-            </label>
-            <div className="mt-2 flex flex-wrap justify-end gap-2">
-              {record.status === "failed" && (
+              <div className="mt-2 flex flex-wrap justify-end gap-2">
+                {record.status === "failed" && (
+                  <button
+                    type="button"
+                    className={small}
+                    onClick={() => update(index, { grade: 0 })}
+                  >
+                    Por falta (0)
+                  </button>
+                )}
                 <button
                   type="button"
-                  className={small}
-                  onClick={() => update(index, { grade: 0 })}
+                  className={`${small} text-red-700`}
+                  aria-label={`Remover tentativa de ${record.academic_term}`}
+                  onClick={() => onChange(sorted.filter((_, i) => i !== index))}
                 >
-                  Por falta (0)
+                  Remover
                 </button>
-              )}
-              <button
-                type="button"
-                className={`${small} text-red-700`}
-                aria-label={`Remover tentativa de ${record.academic_term}`}
-                onClick={() => onChange(sorted.filter((_, i) => i !== index))}
-              >
-                Remover
-              </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      {!refused && !approved && free.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={small}
-            onClick={() => add("completed")}
-          >
-            + Aprovada
-          </button>
-          <button type="button" className={small} onClick={() => add("failed")}>
-            + Reprovada
-          </button>
-          {!used.has(current) && (
-            <button
-              type="button"
-              className={small}
-              onClick={() => add("in_progress")}
-            >
-              + Cursando agora
-            </button>
-          )}
-        </div>
-      )}
       {sorted.length > 0 && !firstPeriodRequired && (
         <button
           type="button"

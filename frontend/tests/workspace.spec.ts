@@ -153,7 +153,7 @@ test("what if I fail shows the delay and the failure level", async ({
   await register(page, "what-if", "1");
   await goHistory(page);
   await card(page, "Introdução à Programação").click();
-  const details = page.getByRole("complementary", {
+  const details = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await details.getByRole("tab", { name: "Resumo" }).click();
@@ -423,7 +423,7 @@ test("course details open as a pop-up and the map uses the full width", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await register(page, "details-popup");
   await goHistory(page);
-  const details = page.getByRole("complementary", {
+  const details = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await expect(details).toBeHidden();

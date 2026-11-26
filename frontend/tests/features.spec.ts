@@ -88,7 +88,7 @@ test("public explorer simulates approvals without an account", async ({
       exact: true,
     })
     .click();
-  const details = page.getByRole("complementary", {
+  const details = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await details.getByRole("tab", { name: "Dependências" }).click();

@@ -64,7 +64,7 @@ test("selection draws dependency arrows and the details have tabs", async ({
   await expect(
     card(page, "Matemática Discreta para Computação"),
   ).toHaveAttribute("data-dimmed", "true");
-  const details = page.getByRole("complementary", {
+  const details = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await expect(details.getByRole("tab", { name: "Histórico" })).toHaveAttribute(

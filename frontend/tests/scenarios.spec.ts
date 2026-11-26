@@ -10,7 +10,7 @@ test("trocar de cenário descarta as alterações da demonstração anterior", a
   await page
     .getByRole("button", { name: "Desenvolvimento de Software", exact: true })
     .click();
-  const panel = page.getByRole("complementary", {
+  const panel = page.getByRole("dialog", {
     name: "Detalhes da disciplina",
   });
   await panel.getByRole("button", { name: "Simular aprovação" }).click();

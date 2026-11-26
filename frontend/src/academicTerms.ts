@@ -13,6 +13,32 @@ export function periodOf(startTerm: string, term: string) {
   return y1 * 2 + h1 - (y0 * 2 + h0) + 1;
 }
 
+/** "2025.1 · 3º período": o semestre sempre com o período, para ninguém se perder. */
+export function termWithPeriod(startTerm: string | null, term: string) {
+  if (!startTerm || !/^\d{4}\.[12]$/.test(term)) return term;
+  const period = periodOf(startTerm, term);
+  return period >= 1 ? `${term} · ${period}º período` : term;
+}
+
+/**
+ * Semestre livre mais próximo do desejado (empate: o mais recente). Evita que
+ * uma tentativa caia no 1º período só porque o semestre esperado já estava ocupado.
+ */
+export function nearestFreeTerm(free: string[], wanted: string) {
+  if (!free.length) return undefined;
+  if (free.includes(wanted)) return wanted;
+  const index = (term: string) => {
+    const [year, half] = term.split(".").map(Number);
+    return year * 2 + half;
+  };
+  const target = index(wanted);
+  return [...free].sort(
+    (a, b) =>
+      Math.abs(index(a) - target) - Math.abs(index(b) - target) ||
+      index(b) - index(a),
+  )[0];
+}
+
 /** Semestres do ingresso até o atual, para escolher o semestre de cada tentativa. */
 export function termsUntil(startTerm: string, currentPeriod: number) {
   return Array.from({ length: currentPeriod }, (_, i) =>

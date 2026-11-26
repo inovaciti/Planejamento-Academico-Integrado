@@ -45,7 +45,41 @@ import {
   periodOf,
   termOf,
   termsUntil,
+  termWithPeriod,
 } from "./academicTerms";
+
+const attemptWords: Record<HistoryRecord["status"], string> = {
+  completed: "aprovada",
+  failed: "reprovada",
+  in_progress: "cursando",
+};
+const sameAttempt = (a: HistoryRecord, b: HistoryRecord) =>
+  a.academic_term === b.academic_term &&
+  a.status === b.status &&
+  (a.grade ?? null) === (b.grade ?? null);
+
+/** "Algoritmos: aprovada em 2025.1 · 3º período, nota 8,5" — o que acabou de mudar. */
+function describeAttempts(
+  course: Pick<Course, "name">,
+  before: HistoryRecord[],
+  after: HistoryRecord[],
+  startTerm: string | null,
+) {
+  const name = courseName(course);
+  if (!after.length) return `${name}: marcada como não cursada`;
+  const changed = after.find((r) => !before.some((b) => sameAttempt(r, b)));
+  if (changed) {
+    const grade =
+      changed.grade !== null && changed.grade !== undefined
+        ? `, nota ${formatGrade(changed.grade)}`
+        : "";
+    return `${name}: ${attemptWords[changed.status]} em ${termWithPeriod(startTerm, changed.academic_term)}${grade}`;
+  }
+  const removed = before.find((b) => !after.some((r) => sameAttempt(r, b)));
+  return removed
+    ? `${name}: tentativa de ${termWithPeriod(startTerm, removed.academic_term)} removida`
+    : `${name}: histórico alterado`;
+}
 import { trackedPercent } from "./components/ProgressSummary";
 
 const input =
@@ -137,6 +171,11 @@ export function Student({
   const [busy, setBusy] = useState(false);
   const [editingHistory, setEditingHistory] = useState(false);
   const [historyDraft, setHistoryDraft] = useState<HistoryUpdate | null>(null);
+  /** Última alteração do histórico, com o estado anterior para "Desfazer". */
+  const [lastChange, setLastChange] = useState<{
+    text: string;
+    before: HistoryUpdate | null;
+  } | null>(null);
   const [preview, setPreview] = useState<Progression | null>(null);
   const [scrollTo, setScrollTo] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -294,7 +333,11 @@ export function Student({
     setSaved(plan);
     setSelectedId(null);
   }
-  function editHistory(next: HistoryRecord[]) {
+  /**
+   * Altera o histórico ainda não salvo. `change` descreve a alteração na barra
+   * de salvar ("Algoritmos: aprovada em 2025.1 · 3º período") e permite desfazê-la.
+   */
+  function editHistory(next: HistoryRecord[], change?: string) {
     if (!startTerm) {
       setError(
         "Informe o semestre de ingresso em “Editar histórico” antes de registrar cadeiras no mapa.",
@@ -306,13 +349,44 @@ export function Student({
       current_period: currentPeriod,
       records: next,
     };
+    setLastChange(change ? { text: change, before: historyDraft } : null);
     setHistoryDraft(update);
     void run(async () => {
       setPreview(await api.previewHistory(update));
     });
   }
-  function replaceCourse(courseId: string, next: HistoryRecord[]) {
-    editHistory([...records.filter((r) => r.course_id !== courseId), ...next]);
+  function replaceCourse(
+    courseId: string,
+    next: HistoryRecord[],
+    change?: string,
+  ) {
+    editHistory(
+      [...records.filter((r) => r.course_id !== courseId), ...next],
+      change,
+    );
+  }
+  // Salvo ou descartado, não há mais o que desfazer.
+  useEffect(() => {
+    if (!historyDraft) setLastChange(null);
+  }, [historyDraft]);
+  /** Volta o histórico ao estado de antes da última alteração descrita. */
+  function undoLastChange() {
+    if (!lastChange) return;
+    const { before } = lastChange;
+    setLastChange(null);
+    setHistoryDraft(before);
+    if (!before) {
+      setPreview(null);
+      return;
+    }
+    void run(async () => {
+      setPreview(await api.previewHistory(before));
+    });
+  }
+  function discardHistory() {
+    setHistoryDraft(null);
+    setPreview(null);
+    setLastChange(null);
   }
   /** Simulação sem alternativa aberta: o primeiro arraste cria um rascunho. */
   async function ensureDraft() {
@@ -421,34 +495,35 @@ export function Student({
         !window.confirm("Remover as tentativas desta eletiva do histórico?")
       )
         return;
-      replaceCourse(courseId, []);
+      replaceCourse(courseId, [], describeAttempts(course, own, [], startTerm));
       setSelectedId(null);
       return;
     }
     const term = termOf(startTerm, period);
     const status = period >= currentPeriod ? "in_progress" : "completed";
     if (own.some((r) => r.academic_term === term)) return;
-    if (!own.length) {
-      replaceCourse(courseId, [
-        { course_id: courseId, academic_term: term, status },
-      ]);
-    } else {
-      const latest = own[own.length - 1];
-      replaceCourse(courseId, [
-        ...own.slice(0, -1),
-        {
-          ...latest,
-          academic_term: term,
-          status:
-            status === "in_progress"
-              ? "in_progress"
-              : latest.status === "in_progress"
-                ? "completed"
-                : latest.status,
-          grade: status === "in_progress" ? null : latest.grade,
-        },
-      ]);
-    }
+    const latest = own[own.length - 1];
+    const next: HistoryRecord[] = !latest
+      ? [{ course_id: courseId, academic_term: term, status }]
+      : [
+          ...own.slice(0, -1),
+          {
+            ...latest,
+            academic_term: term,
+            status:
+              status === "in_progress"
+                ? "in_progress"
+                : latest.status === "in_progress"
+                  ? "completed"
+                  : latest.status,
+            grade: status === "in_progress" ? null : latest.grade,
+          },
+        ];
+    replaceCourse(
+      courseId,
+      next,
+      describeAttempts(course, own, next, startTerm),
+    );
     setSelectedId(courseId);
     setNotice(
       `${course.type === "elective" ? "Eletiva registrada" : `Registrada em ${term}`} no histórico. Ajuste situação e nota no painel e clique em Salvar histórico.`,
@@ -643,16 +718,19 @@ export function Student({
     const missing = unrecorded(period);
     if (!missing.length) return;
     const current = period === currentPeriod;
-    editHistory([
-      ...records,
-      ...missing.map((c) => ({
-        course_id: c.id,
-        academic_term: term,
-        status: current ? ("in_progress" as const) : ("completed" as const),
-      })),
-    ]);
     const n = missing.length;
     const plural = n > 1 ? "s" : "";
+    editHistory(
+      [
+        ...records,
+        ...missing.map((c) => ({
+          course_id: c.id,
+          academic_term: term,
+          status: current ? ("in_progress" as const) : ("completed" as const),
+        })),
+      ],
+      `${n} disciplina${plural} do ${period}º período (${term}) marcada${plural} como ${current ? "cursando" : `aprovada${plural}`}`,
+    );
     setNotice(
       current
         ? `${n} disciplina${plural} do ${period}º período marcada${plural} como cursando. Se não está cursando alguma, abra o card e clique em “Marcar como não cursada”; depois, Salvar histórico.`
@@ -1145,36 +1223,6 @@ export function Student({
                 registrar aprovação, reprovação e nota. Períodos futuros levam à{" "}
                 <NavLink to="/simulacao">Simulação</NavLink>.
               </p>
-              {historyDirty && (
-                <div
-                  className="history-save-bar mt-4"
-                  role="region"
-                  aria-label="Alterações no histórico"
-                >
-                  <p className="text-sm text-violet-800">
-                    Alterações no histórico ainda não salvas.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className={primary}
-                      disabled={busy}
-                      onClick={saveHistoryDraft}
-                    >
-                      Salvar histórico
-                    </button>
-                    <button
-                      className={button}
-                      disabled={busy}
-                      onClick={() => {
-                        setHistoryDraft(null);
-                        setPreview(null);
-                      }}
-                    >
-                      Descartar alterações
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
           {mode === "simulation" && (
@@ -1611,6 +1659,7 @@ export function Student({
                         (r) => r.course_id === selected.id,
                       )}
                       terms={termsUntil(startTerm, currentPeriod)}
+                      startTerm={startTerm}
                       defaultTerm={termOf(
                         startTerm,
                         Math.max(
@@ -1631,7 +1680,18 @@ export function Student({
                       failureRule={
                         data.failure_rule ?? "Res. nº 09/2009-CCEPE/UFPE"
                       }
-                      onChange={(next) => replaceCourse(selected.id, next)}
+                      onChange={(next) =>
+                        replaceCourse(
+                          selected.id,
+                          next,
+                          describeAttempts(
+                            selected,
+                            records.filter((r) => r.course_id === selected.id),
+                            next,
+                            startTerm,
+                          ),
+                        )
+                      }
                     />
                   ) : (
                     <p className="details-note warn">
@@ -1731,6 +1791,51 @@ export function Student({
             layout={mapLayout}
             showGrades={mode === "history"}
           />
+        )}
+        {/* Fixa no rodapé enquanto há alterações: salvar fica sempre à vista. */}
+        {mode === "history" && historyDirty && (
+          <div
+            className="history-save-bar"
+            role="region"
+            aria-label="Alterações no histórico"
+          >
+            <div className="min-w-0" aria-live="polite">
+              <p className="history-save-title">
+                Alterações no histórico ainda não salvas.
+              </p>
+              {lastChange && (
+                <p className="history-save-change">{lastChange.text}</p>
+              )}
+            </div>
+            <div className="history-save-actions">
+              {lastChange && (
+                <button
+                  type="button"
+                  className={button}
+                  disabled={busy}
+                  onClick={undoLastChange}
+                >
+                  Desfazer
+                </button>
+              )}
+              <button
+                type="button"
+                className={button}
+                disabled={busy}
+                onClick={discardHistory}
+              >
+                Descartar alterações
+              </button>
+              <button
+                type="button"
+                className={primary}
+                disabled={busy}
+                onClick={saveHistoryDraft}
+              >
+                Salvar histórico
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </AppShell>

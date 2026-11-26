@@ -887,17 +887,102 @@ button:not(.course-card):not(:disabled):hover {
   font-size: 11px;
   color: #6a8098;
 }
-/* Modo histórico: barra de salvar e editor de tentativas. */
+/* Modo histórico: barra de salvar e editor de tentativas.
+   Fica presa ao rodapé (acima da barra de abas no celular) enquanto há
+   alterações, para o salvar nunca ficar longe de onde se está marcando. */
 .history-save-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 30;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  margin-top: 16px;
   border: 1px solid #ddd3f5;
   border-radius: 14px;
-  background: #f7f3ffcc;
+  background: #f7f3fff5;
   padding: 10px 14px;
+  box-shadow: 0 12px 32px -16px #2d1b6b66;
+  backdrop-filter: blur(8px);
+}
+.history-save-title {
+  font-size: 0.875rem;
+  color: #5b21b6;
+}
+.history-save-change {
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+.history-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 899px) {
+  .history-save-bar {
+    bottom: calc(66px + env(safe-area-inset-bottom));
+    padding: 10px 12px;
+  }
+  .history-save-actions {
+    width: 100%;
+  }
+  .history-save-actions > button {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}
+/* Ações de registro da folha de detalhes: um toque, alvo de 44 px. */
+.attempt-action {
+  min-height: 44px;
+  border: 1px solid var(--line, #cbd5e1);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.attempt-action[data-kind="completed"] {
+  border-color: #86c9ad;
+  color: #17694b;
+}
+.attempt-action[data-kind="failed"] {
+  border-color: #f0a7a7;
+  color: #a1262b;
+}
+.attempt-action[data-kind="in_progress"] {
+  border-color: #a9c1e6;
+  color: #23518f;
+}
+.attempt-action:hover {
+  filter: brightness(0.97);
+}
+.attempt-moved {
+  border-radius: 8px;
+  background: #fff7e6;
+  padding: 6px 8px;
+  color: #7a4b00;
+}
+[data-theme="dark"] .attempt-moved {
+  background: #3a2c10;
+  color: #f5d48a;
+}
+[data-theme="dark"] .history-save-title {
+  color: #c4b5fd;
+}
+[data-theme="dark"] .history-save-change {
+  color: #e5e7eb;
+}
+@media (max-width: 899px) {
+  /* 16 px evita o zoom automático do iOS ao focar o campo. */
+  .attempt-field {
+    font-size: 16px;
+    min-height: 44px;
+  }
 }
 .attempts-editor input:disabled {
   background: #f1f5f9;
@@ -3410,7 +3495,7 @@ kbd {
 }
 @media (min-width: 900px) {
   /* Aberto, o pop-up abre espaço à direita: nada da página fica escondido sob ele. */
-  .shell:has(.details-popup:not(.hidden)) .shell-main {
+  body:has(.details-popup:not(.hidden)) .shell-main {
     padding-right: calc(min(380px, calc(100vw - 32px)) + 24px);
   }
 }
@@ -3467,4 +3552,19 @@ kbd {
 }
 .brand-lockup .logo-text small {
   font-size: 13px;
+}
+
+/* Folha de detalhes (portal no <body>): título recebe foco ao abrir no
+   celular, sem contorno de mouse; abas e fechar com alvo de 44 px. */
+.details-title:focus:not(:focus-visible) {
+  outline: none;
+}
+@media (max-width: 899px) {
+  .details-tabs button {
+    min-height: 44px;
+  }
+  .details-popup button[aria-label="Fechar detalhes"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }

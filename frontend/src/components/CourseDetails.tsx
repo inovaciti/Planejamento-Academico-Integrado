@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { courseName } from "../display";
 import type { ActionKind, Course } from "../types";
 import { statusMeta } from "./CourseCard";
@@ -57,6 +58,20 @@ export function CourseDetails({
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [onClose]);
+  // No celular a folha cobre o mapa: o foco entra nela ao abrir (leitores de
+  // tela anunciam a disciplina) e volta ao card ao fechar.
+  const title = useRef<HTMLHeadingElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const isOpen = !!course;
+  useEffect(() => {
+    const narrow = window.matchMedia?.("(max-width: 899px)").matches === true;
+    if (isOpen) {
+      returnFocus.current = document.activeElement as HTMLElement | null;
+      if (narrow) title.current?.focus({ preventScroll: true });
+    } else if (narrow && returnFocus.current?.isConnected) {
+      returnFocus.current.focus({ preventScroll: true });
+    }
+  }, [isOpen]);
   const buttonStyle =
     "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium hover:bg-slate-50";
   const byId = new Map(courses.map((item) => [item.id, item]));
@@ -94,20 +109,25 @@ export function CourseDetails({
     ["dependencies", "Dependências"],
   ];
 
-  return (
+  const sheet = (
     <>
       {course && (
         <button
           type="button"
           aria-label="Fechar detalhes"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-slate-950/25 min-[900px]:hidden"
+          className="details-backdrop fixed inset-0 z-40 bg-slate-950/25 min-[900px]:hidden"
         />
       )}
       {/* Pop-up: só existe com uma disciplina selecionada; o mapa usa a largura toda. */}
       <aside
         id="detalhes"
-        aria-label="Detalhes da disciplina"
+        role="dialog"
+        aria-label={
+          course
+            ? `Detalhes da disciplina ${courseName(course)}`
+            : "Detalhes da disciplina"
+        }
         className={`details-panel details-popup ${course ? "" : "hidden"}`}
       >
         {!course ? null : (
@@ -126,29 +146,20 @@ export function CourseDetails({
                 ? "Eletiva"
                 : `${course.period}º período`}
             </p>
-            <h2 className="text-lg leading-6 font-semibold">
+            <h2
+              ref={title}
+              tabIndex={-1}
+              className="details-title text-lg leading-6 font-semibold"
+            >
               {courseName(course)}
             </h2>
             <span
-              className="status-badge mt-3 inline-block"
+              className="status-badge mt-2 inline-block"
               data-status={course.status}
             >
               {statusMeta[course.status].label}
             </span>
-            <dl className="details-stats">
-              <div>
-                <dt>Carga</dt>
-                <dd>{course.hours}h</dd>
-              </div>
-              <div>
-                <dt>Créditos</dt>
-                <dd>{course.credits ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>Dependentes</dt>
-                <dd>{course.dependent_ids.length}</dd>
-              </div>
-            </dl>
+            {/* Ações primeiro: os números ficam no Resumo. */}
             <div className="details-tabs" role="tablist" aria-label="Seções">
               {tabs.map(([key, label]) => (
                 <button
@@ -164,6 +175,20 @@ export function CourseDetails({
             </div>
 
             <div role="tabpanel" hidden={tab !== "summary"}>
+              <dl className="details-stats">
+                <div>
+                  <dt>Carga</dt>
+                  <dd>{course.hours}h</dd>
+                </div>
+                <div>
+                  <dt>Créditos</dt>
+                  <dd>{course.credits ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>Dependentes</dt>
+                  <dd>{course.dependent_ids.length}</dd>
+                </div>
+              </dl>
               {course.status === "locked" && (
                 <p className="details-note warn">
                   Conclua os pré-requisitos pendentes para liberar esta
@@ -345,4 +370,10 @@ export function CourseDetails({
       </aside>
     </>
   );
+  // Portal no <body>: fora do conteúdo da página (que tem z-index próprio),
+  // a folha fica acima da barra de abas do celular em vez de por baixo dela.
+  // Sem DOM (renderização no servidor, testes de componente), fica no lugar.
+  return typeof document === "undefined"
+    ? sheet
+    : createPortal(sheet, document.body);
 }
